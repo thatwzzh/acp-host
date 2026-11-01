@@ -30,6 +30,11 @@ enum Pending {
     NewSession,
     Prompt,
     Permission { request: String },
+    Authenticate,
+    SetModel { model: String, session_id: String },
+    SetModelLegacy { model: String, session_id: String },
+    SetMode,
+    SetOption,
 }
 
 struct Session {
@@ -39,6 +44,10 @@ struct Session {
     pending: HashMap<u64, Pending>,
     acp_session: Option<String>,
     cwd: String,
+    auth_methods: Value,
+    models: Value,
+    modes: Value,
+    config_options: Value,
 }
 
 impl Session {
@@ -48,6 +57,7 @@ impl Session {
         let payload = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         let _ = writeln!(self.stdin, "{}", payload);
         let _ = self.stdin.flush();
+        trace("send", &payload.to_string());
         self.pending.insert(id, pending);
         id
     }
@@ -154,13 +164,14 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
                 Ok(session) => {
                     sessions.insert(key.clone(), session);
                     if let Some(session) = sessions.get_mut(&key) {
-                        session.send(
+                        let full = std::env::var("ACP_HOST_FS").is_ok();
+                    session.send(
                             "initialize",
                             json!({
                                 "protocolVersion": 1,
                                 "clientCapabilities": {
-                                    "fs": {"readTextFile": false, "writeTextFile": false},
-                                    "terminal": false
+                                    "fs": {"readTextFile": full, "writeTextFile": full},
+                                    "terminal": full
                                 }
                             }),
                             Pending::Initialize,
@@ -232,6 +243,84 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
             session.pending.remove(&acp_id);
             ok(id, json!({ "applied": true }));
         }
+        "auth" => {
+            let key = params.get("session").and_then(|v| v.as_str()).unwrap_or("");
+            let method = params.get("method").and_then(|v| v.as_str()).unwrap_or("");
+            let Some(session) = sessions.get_mut(key) else {
+                fail(id, "没有这个 session");
+                return;
+            };
+            let chosen = if method.is_empty() {
+                session.auth_methods
+                    .as_array()
+                    .and_then(|list| list.first())
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            } else {
+                method.to_string()
+            };
+            if chosen.is_empty() {
+                fail(id, "这个 agent 没有可用的登录方式");
+                return;
+            }
+            session.send("authenticate", json!({ "methodId": chosen }), Pending::Authenticate);
+            ok(id, json!({ "authenticating": chosen }));
+        }
+        "session.setModel" => {
+            let key = params.get("session").and_then(|v| v.as_str()).unwrap_or("");
+            let model = params.get("model").and_then(|v| v.as_str()).unwrap_or("");
+            let Some(session) = sessions.get_mut(key) else {
+                fail(id, "没有这个 session");
+                return;
+            };
+            let Some(acp_session) = session.acp_session.clone() else {
+                fail(id, "会话还没就绪");
+                return;
+            };
+            let config_id = model_config_id(&session.config_options);
+            session.send(
+                "session/set_config_option",
+                json!({"sessionId": acp_session, "configId": config_id, "value": model}),
+                Pending::SetModel { model: model.to_string(), session_id: acp_session },
+            );
+            ok(id, json!({ "requested": model }));
+        }
+        "session.setMode" => {
+            let key = params.get("session").and_then(|v| v.as_str()).unwrap_or("");
+            let mode = params.get("mode").and_then(|v| v.as_str()).unwrap_or("");
+            let Some(session) = sessions.get_mut(key) else {
+                fail(id, "没有这个 session");
+                return;
+            };
+            let Some(acp_session) = session.acp_session.clone() else {
+                fail(id, "会话还没就绪");
+                return;
+            };
+            session.send("session/set_mode",
+                         json!({"sessionId": acp_session, "modeId": mode}),
+                         Pending::SetMode);
+            ok(id, json!({ "requested": mode }));
+        }
+        "session.setOption" => {
+            let key = params.get("session").and_then(|v| v.as_str()).unwrap_or("");
+            let config_id = params.get("configId").and_then(|v| v.as_str()).unwrap_or("");
+            let value = params.get("value").cloned().unwrap_or(Value::Null);
+            let Some(session) = sessions.get_mut(key) else {
+                fail(id, "没有这个 session");
+                return;
+            };
+            let Some(acp_session) = session.acp_session.clone() else {
+                fail(id, "会话还没就绪");
+                return;
+            };
+            session.send("session/set_config_option",
+                         json!({"sessionId": acp_session, "configId": config_id,
+                                "value": value}),
+                         Pending::SetOption);
+            ok(id, json!({ "requested": config_id }));
+        }
         "shutdown" => {
             for (_, mut session) in sessions.drain() {
                 let _ = session.child.kill();
@@ -264,6 +353,11 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                     emit(json!({"event": "error", "session": key, "message": error}));
                     return;
                 }
+                session.auth_methods = result
+                    .get("authMethods")
+                    .cloned()
+                    .or_else(|| result.pointer("/agentCapabilities/auth/methods").cloned())
+                    .unwrap_or(Value::Null);
                 let cwd = session.cwd.clone();
                 session.send("session/new", json!({"cwd": cwd, "mcpServers": []}),
                              Pending::NewSession);
@@ -277,21 +371,79 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                     .get("sessionId")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
+                session.models = result.get("models").cloned().unwrap_or(Value::Null);
+                session.modes = result.get("modes").cloned().unwrap_or(Value::Null);
+                session.config_options = result.get("configOptions").cloned().unwrap_or(Value::Null);
                 emit(json!({
                     "event": "ready",
                     "session": key,
                     "acpSession": session.acp_session,
-                    "models": result.get("models").cloned().unwrap_or(Value::Null)
+                    "agent": result.get("agentInfo").cloned().unwrap_or(Value::Null),
+                    "models": session.models,
+                    "modes": session.modes,
+                    "configOptions": session.config_options,
+                    "authMethods": session.auth_methods
                 }));
             }
             Pending::Prompt => {
-                let stop = result
-                    .get("stopReason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("end_turn");
-                emit(json!({"event": "done", "session": key, "stopReason": stop}));
+                if let Some(error) = error {
+                    let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                    let needs_auth = code == -32000 || message.to_lowercase().contains("auth");
+                    emit(json!({
+                        "event": "error", "session": key, "code": code, "message": error,
+                        "authRequired": needs_auth,
+                        "authMethods": session.auth_methods
+                    }));
+                } else {
+                    let stop = result
+                        .get("stopReason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("end_turn");
+                    emit(json!({"event": "done", "session": key, "stopReason": stop}));
+                }
             }
             Pending::Permission { .. } => {}
+            Pending::Authenticate => {
+                if let Some(error) = error {
+                    emit(json!({"event": "authFailed", "session": key, "error": error}));
+                } else {
+                    emit(json!({"event": "authenticated", "session": key}));
+                }
+            }
+            Pending::SetModel { model, session_id } => {
+                if let Some(error) = error {
+                    // 有的 agent 只实现了 legacy 的 session/set_model
+                    session.send("session/set_model",
+                                 json!({"sessionId": session_id, "modelId": model}),
+                                 Pending::SetModelLegacy { model, session_id });
+                    let _ = error;
+                } else {
+                    emit(json!({"event": "modelChanged", "session": key, "model": model}));
+                }
+            }
+            Pending::SetModelLegacy { model, .. } => {
+                if let Some(error) = error {
+                    emit(json!({"event": "error", "session": key,
+                                "message": format!("切换模型失败: {error}")}));
+                } else {
+                    emit(json!({"event": "modelChanged", "session": key, "model": model}));
+                }
+            }
+            Pending::SetMode => {
+                if let Some(error) = error {
+                    emit(json!({"event": "error", "session": key, "message": error}));
+                } else {
+                    emit(json!({"event": "modeChanged", "session": key}));
+                }
+            }
+            Pending::SetOption => {
+                if let Some(error) = error {
+                    emit(json!({"event": "error", "session": key, "message": error}));
+                } else {
+                    emit(json!({"event": "optionChanged", "session": key}));
+                }
+            }
         }
         return;
     }
@@ -300,6 +452,10 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
 fn handle_agent_request(key: &str, value: Value, session: &mut Session) {
     let method = value.get("method").and_then(|m| m.as_str()).unwrap_or("");
     match method {
+        "_auth/status_update" => {
+            emit(json!({"event": "authStatus", "session": key,
+                        "status": value.pointer("/params/authStatus").cloned().unwrap_or(Value::Null)}));
+        }
         "session/update" => {
             let params = value.get("params").cloned().unwrap_or(Value::Null);
             let update = params.get("update").cloned().unwrap_or(Value::Null);
@@ -354,6 +510,19 @@ fn handle_agent_request(key: &str, value: Value, session: &mut Session) {
     }
 }
 
+fn model_config_id(options: &Value) -> String {
+    if let Some(list) = options.as_array() {
+        for option in list {
+            let id = option.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let category = option.get("category").and_then(|v| v.as_str()).unwrap_or("");
+            if id == "model" || category == "model" {
+                return id.to_string();
+            }
+        }
+    }
+    "model".to_string()
+}
+
 fn text_of(update: &Value) -> String {
     update
         .pointer("/content/text")
@@ -381,6 +550,7 @@ fn spawn_agent(key: &str, command_line: &str, cwd: &str) -> anyhow::Result<Sessi
     thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().flatten() {
+            trace("recv", &line);
             if let Ok(value) = serde_json::from_str::<Value>(&line) {
                 if let Some(sender) = SENDER.get() {
                     let _ = sender.send(Incoming::Agent(key_out.clone(), value));
@@ -406,10 +576,23 @@ fn spawn_agent(key: &str, command_line: &str, cwd: &str) -> anyhow::Result<Sessi
         pending: HashMap::new(),
         acp_session: None,
         cwd: cwd.to_string(),
+        auth_methods: Value::Null,
+        models: Value::Null,
+        modes: Value::Null,
+        config_options: Value::Null,
     })
 }
 
 static SENDER: std::sync::OnceLock<Sender<Incoming>> = std::sync::OnceLock::new();
+
+/// ACP_HOST_TRACE=1 时把收发原文打到 stderr，排查字段用
+fn trace(direction: &str, payload: &str) {
+    if std::env::var("ACP_HOST_TRACE").is_ok() {
+        let limit = std::env::var("ACP_HOST_TRACE_LIMIT").ok().and_then(|v| v.parse().ok()).unwrap_or(1200);
+        let text = if payload.len() > limit { format!("{}…", &payload[..limit]) } else { payload.to_string() };
+        eprintln!("[{direction}] {text}");
+    }
+}
 
 fn emit(value: Value) {
     let mut stdout = std::io::stdout();
@@ -435,11 +618,17 @@ fn registry() -> Vec<Value> {
 
 fn default_agents() -> Vec<Value> {
     let mut list = vec![
+        json!({"id": "cursor", "name": "Cursor CLI", "command": "agent acp"}),
         json!({"id": "codebuddy", "name": "CodeBuddy Code", "command": "codebuddy --acp"}),
         json!({"id": "claude", "name": "Claude Code",
                "command": "npx -y @agentclientprotocol/claude-agent-acp"}),
         json!({"id": "codex", "name": "Codex",
                "command": "npx -y @agentclientprotocol/codex-acp"}),
+        json!({"id": "gemini", "name": "Gemini CLI", "command": "gemini --experimental-acp"}),
+        json!({"id": "opencode", "name": "OpenCode", "command": "opencode acp"}),
+        json!({"id": "qwen", "name": "Qwen Code", "command": "qwen --experimental-acp"}),
+        json!({"id": "kiro", "name": "Kiro", "command": "kiro-cli acp"}),
+        json!({"id": "qoder", "name": "Qoder", "command": "qodercli --acp"}),
     ];
     let bundled = format!(
         "{}/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy",

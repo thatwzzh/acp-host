@@ -39,6 +39,10 @@ echo '{"id":"1","method":"agents.list"}' | ./acp-host
 | `session.start` | `agent`, `cwd` | 起一个会话；返回 `session` 句柄 |
 | `session.prompt` | `session`, `text` | 发一句话；事件异步回来 |
 | `session.cancel` | `session` | 取消当前回合 |
+| `session.setModel` | `session`, `model` | 换模型（先试 `set_config_option`，失败退回 legacy `set_model`） |
+| `session.setMode` | `session`, `mode` | 换模式（Agent / Plan / Ask 这类） |
+| `session.setOption` | `session`, `configId`, `value` | 改任意选项（思考强度、权限模式…） |
+| `auth` | `session`, `method`（可省） | 走 agent 的登录流程 |
 | `permission` | `session`, `request`, `decision` | 回应权限请求（`allow` / `deny`） |
 | `shutdown` | — | 收摊 |
 
@@ -51,7 +55,10 @@ echo '{"id":"1","method":"agents.list"}' | ./acp-host
 {"event":"thought","session":"s1","text":"思考片段"}
 {"event":"tool","session":"s1","id":"…","title":"…","status":"…"}
 {"event":"permission","session":"s1","request":"s1-p4","title":"读取 /tmp/a.txt","options":[…]}
+{"event":"authenticated","session":"s1"}
+{"event":"modelChanged","session":"s1","model":"grok-4.7[…]"}
 {"event":"done","session":"s1","stopReason":"end_turn"}
+{"event":"error","session":"s1","code":-32000,"message":{…},"authRequired":true}
 {"event":"error","session":"s1","message":{…}}
 ```
 
@@ -92,11 +99,35 @@ for line in host.stdout:
 
 TypeScript / Swift / Go 同理：起进程、按行读写 JSON，没有 SDK 依赖。
 
+## 真实 agent 验证到哪一步
+
+用本机的 Cursor CLI（`agent acp`）和 Claude 适配器跑过：
+
+| 能力 | 结果 |
+|---|---|
+| `initialize` + 版本校验 | ✅ 两个都通 |
+| `session/new` | ✅ 拿到 sessionId |
+| 模型清单 | ✅ Cursor 返回 **32 个**模型（`availableModels`） |
+| `auth` | ✅ Cursor 返回 `cursor_login`，调用成功 |
+| `session.setModel` | ✅ 触发 `modelChanged`（`set_config_option` 可用） |
+| 真正生成文本 | ⚠️ 两台 CLI **都没登录**：Claude 回 `-32000 Authentication required`，Cursor 回一句 `WritableIterable is closed` |
+
+所以协议转译是通的；卡点是登录态，不是代码。登录后（`claude` 里 `/login`，或 `agent login`）再跑一遍就能看到正文流。
+
+## 环境变量
+
+| 变量 | 作用 |
+|---|---|
+| `ACP_HOST_TRACE=1` | 把收发原文打到 stderr |
+| `ACP_HOST_TRACE_LIMIT=4000` | 单行截断长度（默认 1200） |
+| `ACP_HOST_FS=1` | 声明支持文件/终端能力（有些 agent 不放开不肯流式） |
+
 ## 已知限制（v0.1）
 
 - 只做 `session/prompt` 一轮一问；多轮靠同一个 session 继续发
 - 不转发 `fs/*`、`terminal/*` 请求（能力声明为 false）
-- 模型切换、登录授权还没做（下一步：`session/set_model`、`auth` 流程）
+- 登录后**自动重试那一问**还没做（现在只抛 `authRequired`，由客户端决定）
+- 上下文多轮复用同一个 session，但没有做历史压缩
 - 协议是**按行 JSON**，不是标准 ACP；客户端不需要懂 ACP，这正是目的
 
 ## 目录
