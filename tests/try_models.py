@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """逐个试模型，看哪个能真的出字。"""
-import json, queue, subprocess, threading, time, sys
+import json, os, queue, subprocess, threading, time, sys
 
 CANDIDATES = sys.argv[1:] or ["auto-smart[optimize_for=balanced]",
                               "deepseek-v41-flash-1017[reasoning_effort=high]",
@@ -17,7 +17,7 @@ def wait(cond, timeout=60):
         if cond(e): return e
     return None
 
-send({"id":"1","method":"session.start","params":{"agent":"cursor","cwd":"/Users/wangzihao/code/Sprig"}})
+send({"id":"1","method":"session.start","params":{"agent":"cursor","cwd":os.environ.get("ACP_HOST_CWD", os.getcwd())}})
 wait(lambda e: e.get("event") == "ready")
 print("[ready]")
 

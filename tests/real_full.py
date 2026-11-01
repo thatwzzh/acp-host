@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """真实 agent 全流程：登录 → 提问 → 换模型 → 再问。"""
-import json, queue, subprocess, sys, threading, time
+import json, os, queue, subprocess, sys, threading, time
 
 agent = sys.argv[1] if len(sys.argv) > 1 else "cursor"
 host = subprocess.Popen(["target/release/acp-host"], stdin=subprocess.PIPE,

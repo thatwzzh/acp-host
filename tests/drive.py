@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """驱动 acp-host：起进程、发命令、收事件、自动批准权限。"""
-import json, queue, subprocess, threading, time
+import json, os, queue, subprocess, threading, time
 
 host = subprocess.Popen(["target/release/acp-host"], stdin=subprocess.PIPE,
                         stdout=subprocess.PIPE, text=True, bufsize=1)
