@@ -221,6 +221,7 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
             let key = params.get("session").and_then(|v| v.as_str()).unwrap_or("");
             let request = params.get("request").and_then(|v| v.as_str()).unwrap_or("");
             let decision = params.get("decision").and_then(|v| v.as_str()).unwrap_or("deny");
+            let option = params.get("option").and_then(|v| v.as_str());
             let Some(session) = sessions.get_mut(key) else {
                 fail(id, "没有这个 session");
                 return;
@@ -234,11 +235,12 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
                 fail(id, "没有待处理的权限请求");
                 return;
             };
-            let outcome = if decision == "allow" {
-                json!({"outcome": "selected", "optionId": "allow"})
-            } else {
-                json!({"outcome": "selected", "optionId": "deny"})
-            };
+            // 客户端能给出具体 optionId 就用它（allow_always / allow / reject），
+            // 否则退回二值判断
+            let option_id = option
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| if decision == "allow" { "allow".into() } else { "reject".into() });
+            let outcome = json!({"outcome": "selected", "optionId": option_id});
             let payload = json!({"jsonrpc": "2.0", "id": acp_id,
                                  "result": {"outcome": outcome}});
             let _ = writeln!(session.stdin, "{}", payload);
@@ -539,11 +541,7 @@ fn handle_agent_request(key: &str, value: Value, session: &mut Session) {
         "session/request_permission" => {
             let params = value.get("params").cloned().unwrap_or(Value::Null);
             let request_id = format!("{key}-p{}", session.next_id + 1);
-            let title = params
-                .pointer("/toolCall/title")
-                .and_then(|v| v.as_str())
-                .unwrap_or("请求权限")
-                .to_string();
+            let title = permission_title(&params);
             if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
                 session.pending.insert(id, Pending::Permission { request: request_id.clone() });
                 emit(json!({
@@ -586,6 +584,26 @@ fn first_auth_method(methods: &Value) -> Option<String> {
         .and_then(|m| m.get("id"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
+}
+
+/// 权限请求的标题。各家 agent 给的信息不一样：有的给 title，
+/// 有的只给 toolCall.rawInput（WorkBuddy 就是后者），尽量拼出人话。
+fn permission_title(params: &Value) -> String {
+    if let Some(title) = params.pointer("/toolCall/title").and_then(|v| v.as_str()) {
+        return title.to_string();
+    }
+    let tool = params
+        .pointer("/toolCall/_meta/codebuddy.ai~1toolName")
+        .and_then(|v| v.as_str())
+        .or_else(|| params.pointer("/toolCall/kind").and_then(|v| v.as_str()))
+        .unwrap_or("工具调用");
+    let detail = params
+        .pointer("/toolCall/rawInput/command")
+        .and_then(|v| v.as_str())
+        .or_else(|| params.pointer("/toolCall/rawInput/path").and_then(|v| v.as_str()))
+        .or_else(|| params.pointer("/toolCall/rawInput/description").and_then(|v| v.as_str()))
+        .unwrap_or("");
+    if detail.is_empty() { tool.to_string() } else { format!("{tool}: {detail}") }
 }
 
 fn model_config_id(options: &Value) -> String {
