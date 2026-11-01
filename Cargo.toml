@@ -1,0 +1,16 @@
+[package]
+name = "acp-host"
+version = "0.1.0"
+edition = "2021"
+description = "把本机的 ACP agent 变成一个可被任意语言调用的单二进制守护进程"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

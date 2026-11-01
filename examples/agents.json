@@ -1,0 +1,12 @@
+[
+  {
+    "id": "claude",
+    "name": "Claude Code",
+    "command": "npx -y @agentclientprotocol/claude-agent-acp"
+  },
+  {
+    "id": "codex",
+    "name": "Codex",
+    "command": "npx -y @agentclientprotocol/codex-acp"
+  }
+]
