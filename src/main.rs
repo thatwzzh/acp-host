@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 
 #[derive(Debug)]
 enum Incoming {
+    StdinClosed,
     Command(Value),
     Agent(String, Value),
     Stderr(String, String),
@@ -96,6 +97,8 @@ fn main() {
 
     for message in rx {
         match message {
+            // 宿主 app 退出了：收摊，别留孤儿进程
+            Incoming::StdinClosed => break,
             Incoming::Command(command) => {
                 handle_command(command, &mut sessions, &mut next_session);
             }
@@ -131,6 +134,8 @@ fn spawn_stdin_reader(tx: Sender<Incoming>) {
                 Err(error) => emit(json!({"event": "error", "message": error.to_string()})),
             }
         }
+        // stdin 读到 EOF（父进程没了或主动关了）：通知主循环退出
+        let _ = tx.send(Incoming::StdinClosed);
     });
 }
 
