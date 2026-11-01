@@ -141,6 +141,7 @@ Cursor CLI 也验过握手、模型清单、登录、换模型，但它的额度
 | `ACP_HOST_TRACE=1` | 把收发原文打到 stderr |
 | `ACP_HOST_TRACE_LIMIT=4000` | 单行截断长度（默认 1200） |
 | `ACP_HOST_FS=1` | 声明支持文件/终端能力（有些 agent 不放开不肯流式） |
+| `ACP_HOST_AUTO_AUTH=1` | 开会话前先主动 authenticate（Cursor 这类需要；**默认关**，否则 WorkBuddy 每次提问都会弹登录） |
 
 ## 已知限制（v0.1）
 

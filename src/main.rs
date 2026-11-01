@@ -48,6 +48,8 @@ struct Session {
     models: Value,
     modes: Value,
     config_options: Value,
+    auth_attempted: bool,
+    last_prompt: Option<String>,
 }
 
 impl Session {
@@ -193,6 +195,7 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
                 fail(id, "会话还没就绪（initialize / session/new 未完成）");
                 return;
             };
+            session.last_prompt = Some(text.to_string());
             session.send(
                 "session/prompt",
                 json!({
@@ -359,9 +362,10 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                     .or_else(|| result.pointer("/agentCapabilities/auth/methods").cloned())
                     .unwrap_or(Value::Null);
 
-                // Cursor 这类 agent 要求 authenticate 必须发生在 session/new 之前，
-                // 否则后续 prompt 会以「WritableIterable is closed」收场
-                let auto = std::env::var("ACP_HOST_NO_AUTO_AUTH").is_err();
+                // 默认**不**主动登录：WorkBuddy 这类 agent 本身已经登录过，
+                // 再替它调一次 iOA 会弹登录。只有真的被要求登录（-32000）才走 authenticate。
+                // 需要前置认证的 agent（Cursor）用 ACP_HOST_AUTO_AUTH=1 打开。
+                let auto = std::env::var("ACP_HOST_AUTO_AUTH").is_ok();
                 let method = session
                     .auth_methods
                     .as_array()
@@ -382,6 +386,17 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
             }
             Pending::NewSession => {
                 if let Some(error) = error {
+                    let needs_auth = needs_auth(&error);
+                    if needs_auth && !session.auth_attempted {
+                        session.auth_attempted = true;
+                        if let Some(method) = first_auth_method(&session.auth_methods) {
+                            emit(json!({"event": "authRequired", "session": key,
+                                        "method": method}));
+                            session.send("authenticate", json!({"methodId": method}),
+                                         Pending::Authenticate);
+                            return;
+                        }
+                    }
                     emit(json!({"event": "error", "session": key, "message": error}));
                     return;
                 }
@@ -405,12 +420,20 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
             }
             Pending::Prompt => {
                 if let Some(error) = error {
+                    if needs_auth(&error) && !session.auth_attempted {
+                        session.auth_attempted = true;
+                        if let Some(method) = first_auth_method(&session.auth_methods) {
+                            emit(json!({"event": "authRequired", "session": key,
+                                        "method": method}));
+                            session.send("authenticate", json!({"methodId": method}),
+                                         Pending::Authenticate);
+                            return;
+                        }
+                    }
                     let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
-                    let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                    let needs_auth = code == -32000 || message.to_lowercase().contains("auth");
                     emit(json!({
                         "event": "error", "session": key, "code": code, "message": error,
-                        "authRequired": needs_auth,
+                        "authRequired": needs_auth(&error),
                         "authMethods": session.auth_methods
                     }));
                 } else {
@@ -428,11 +451,18 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                 } else {
                     emit(json!({"event": "authenticated", "session": key}));
                 }
-                // 自动登录这条路径：登录完接着开会话
+                // 登录完接着往下走：还没开会话就开，已经在会话里就把刚才那一问重发
                 if session.acp_session.is_none() {
                     let cwd = session.cwd.clone();
                     session.send("session/new", json!({"cwd": cwd, "mcpServers": []}),
                                  Pending::NewSession);
+                } else if let Some(text) = session.last_prompt.clone() {
+                    if let Some(acp_session) = session.acp_session.clone() {
+                        session.send("session/prompt",
+                                     json!({"sessionId": acp_session,
+                                            "prompt": [{"type": "text", "text": text}]}),
+                                     Pending::Prompt);
+                    }
                 }
             }
             Pending::SetModel { model, session_id } => {
@@ -542,6 +572,22 @@ fn handle_agent_request(key: &str, value: Value, session: &mut Session) {
     }
 }
 
+/// 这个错误是不是「要登录」
+fn needs_auth(error: &Value) -> bool {
+    let code = error.get("code").and_then(|v| v.as_i64()).unwrap_or(0);
+    let message = error.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    code == -32000 || message.to_lowercase().contains("auth")
+}
+
+fn first_auth_method(methods: &Value) -> Option<String> {
+    methods
+        .as_array()
+        .and_then(|list| list.first())
+        .and_then(|m| m.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 fn model_config_id(options: &Value) -> String {
     if let Some(list) = options.as_array() {
         for option in list {
@@ -612,6 +658,8 @@ fn spawn_agent(key: &str, command_line: &str, cwd: &str) -> anyhow::Result<Sessi
         models: Value::Null,
         modes: Value::Null,
         config_options: Value::Null,
+        auth_attempted: false,
+        last_prompt: None,
     })
 }
 
