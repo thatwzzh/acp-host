@@ -99,9 +99,28 @@ for line in host.stdout:
 
 TypeScript / Swift / Go 同理：起进程、按行读写 JSON，没有 SDK 依赖。
 
-## 真实 agent 验证到哪一步
+## 真实 agent 验证
 
-用本机的 Cursor CLI（`agent acp`）和 Claude 适配器跑过：
+**WorkBuddy 自带 CLI：全链路跑通**（真实生成中文回答）：
+
+```
+[ready] models=22 current=fast-model
+[done] text='我是一个能帮你完成软件工程任务的人工智能编程助手，可以读写代码、运行命令和排查问题。'
+[model] changed -> balanced-model
+[done] text='我还是那个能帮你写代码、查 Bug、跑命令的 AI 编程助手，只是换了模型来回答。'
+```
+
+它的启动命令比较特别（lite 变体，否则会撞端口 / 卡在配置拉取）：
+
+```
+env -u HTTP_PROXY -u HTTPS_PROXY HOME=<独立目录> CODEBUDDY_FORCE_LITE_WB_BUNDLE=1 \
+    '/Applications/WorkBuddy.app/…/cli/bin/codebuddy' --serve --port 0 --acp
+```
+
+`agents.list` 里已经内置这一条（自动探测安装路径）。
+
+Cursor CLI 也验过握手、模型清单、登录、换模型，但它的额度/地区限制会回
+`Upgrade your plan to continue` —— 那是账号侧的事，协议层没问题：
 
 | 能力 | 结果 |
 |---|---|
@@ -110,9 +129,10 @@ TypeScript / Swift / Go 同理：起进程、按行读写 JSON，没有 SDK 依�
 | 模型清单 | ✅ Cursor 返回 **32 个**模型（`availableModels`） |
 | `auth` | ✅ Cursor 返回 `cursor_login`，调用成功 |
 | `session.setModel` | ✅ 触发 `modelChanged`（`set_config_option` 可用） |
-| 真正生成文本 | ⚠️ 两台 CLI **都没登录**：Claude 回 `-32000 Authentication required`，Cursor 回一句 `WritableIterable is closed` |
+| 真正生成文本 | ✅ WorkBuddy 通；Cursor 受额度限制；Claude 需登录 |
 
-所以协议转译是通的；卡点是登录态，不是代码。登录后（`claude` 里 `/login`，或 `agent login`）再跑一遍就能看到正文流。
+> 2026.05 的 Cursor CLI 在 `session/prompt` 后会回 `WritableIterable is closed`，升级到
+> 2026.10 后消失，变成明确的 `Upgrade your plan to continue`。
 
 ## 环境变量
 

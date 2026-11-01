@@ -662,17 +662,29 @@ fn default_agents() -> Vec<Value> {
         json!({"id": "kiro", "name": "Kiro", "command": "kiro-cli acp"}),
         json!({"id": "qoder", "name": "Qoder", "command": "qodercli --acp"}),
     ];
+    // WorkBuddy 自带的 lite 变体：要 --serve + 随机端口 + 独立 HOME + 去掉宿主代理，
+    // 否则会撞端口（EADDRINUSE）或者卡在它自己的配置拉取上。
+    let home = std::env::var("HOME").unwrap_or_default();
     let bundled = format!(
-        "{}/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy",
-        std::env::var("HOME").unwrap_or_default()
+        "{home}/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy"
     );
     let system = "/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin/codebuddy";
-    if std::path::Path::new(system).exists() {
-        list.insert(0, json!({"id": "workbuddy", "name": "WorkBuddy",
-                              "command": format!("{system} --acp")}));
+    let cli = if std::path::Path::new(system).exists() {
+        Some(system.to_string())
     } else if std::path::Path::new(&bundled).exists() {
-        list.insert(0, json!({"id": "workbuddy", "name": "WorkBuddy",
-                              "command": format!("{bundled} --acp")}));
+        Some(bundled)
+    } else {
+        None
+    };
+    if let Some(cli) = cli {
+        let agent_home = format!("{home}/Library/Application Support/acp-host/agent-home");
+        let _ = std::fs::create_dir_all(&agent_home);
+        let command = format!(
+            "env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY \
+             HOME='{agent_home}' CODEBUDDY_FORCE_LITE_WB_BUNDLE=1 \
+             '{cli}' --serve --port 0 --acp"
+        );
+        list.insert(0, json!({"id": "workbuddy", "name": "WorkBuddy", "command": command}));
     }
     list
 }
