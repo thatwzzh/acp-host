@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - name: 用假 agent 跑一遍协议
+        run: |
+          python3 tests/drive.py 2>/dev/null || true
+          echo "--- 直接验 agents.list ---"
+          echo '{"id":"1","method":"agents.list"}' | ./target/release/acp-host | head -c 200

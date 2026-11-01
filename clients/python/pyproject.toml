@@ -1,0 +1,13 @@
+[project]
+name = "acp-host-client"
+version = "0.1.0"
+description = "acp-host 的薄客户端：起进程、按行 JSON 收事件"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["acp_host"]

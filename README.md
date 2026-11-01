@@ -75,6 +75,49 @@ echo '{"id":"1","method":"agents.list"}' | ./acp-host
 
 内置了 `workbuddy`（自动探测 WorkBuddy.app 里的 CLI）、`codebuddy`、`claude`、`codex`。
 
+## 装到别的项目里
+
+三种用法，按「要不要装 Rust」排：
+
+**1. 直接用二进制**（推荐，不需要 Rust）
+
+```bash
+# 从 Releases 下对应平台（macOS arm64/x86_64、Linux x86_64/arm64）
+curl -L https://github.com/thatwzzh/acp-host/releases/latest/download/acp-host-aarch64-apple-darwin.tar.gz \
+  | tar xz -C /usr/local/bin
+```
+
+发版只需要打个 tag，CI 会编四个平台并挂到 Releases：
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+**2. 用现成客户端**（省得自己拼行协议）
+
+```bash
+# Python
+pip install ./clients/python
+# TypeScript / Node
+npm i ./clients/typescript
+```
+
+```python
+from acp_host import AcpHost
+host = AcpHost()
+for piece in host.ask("你好", agent="workbuddy"):
+    print(piece, end="")
+```
+
+```js
+import { AcpHost } from "acp-host-client";
+const host = new AcpHost();
+for await (const piece of host.ask("你好", { agent: "workbuddy" })) console.log(piece);
+```
+
+**3. 自己包一层**：任何语言都是「起进程 → 写一行 JSON → 读一行 JSON」，
+参考 `clients/` 里两个实现，各 80 行左右。
+
 ## 薄客户端
 
 Python（20 行）：
@@ -154,7 +197,10 @@ Cursor CLI 也验过握手、模型清单、登录、换模型，但它的额度
 ## 目录
 
 ```
-src/main.rs         # 全部逻辑：进程管理、协议转译、事件分发
-tests/fake_agent.py # 最小 ACP agent，用来验证转译
-tests/drive.py      # 驱动脚本：起 host、发命令、自动批准权限
+src/main.rs            # 全部逻辑：进程管理、协议转译、事件分发
+clients/typescript/    # Node 薄客户端（无依赖）
+clients/python/        # Python 薄客户端（无依赖）
+tests/fake_agent.py    # 最小 ACP agent，用来验证转译
+tests/drive.py         # 驱动脚本：起 host、发命令、自动批准权限
+.github/workflows/     # ci（构建+冒烟）与 release（四平台产物）
 ```

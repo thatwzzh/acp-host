@@ -1,0 +1,11 @@
+{
+  "name": "acp-host-client",
+  "version": "0.1.0",
+  "description": "acp-host 的薄客户端：起进程、按行 JSON 收事件",
+  "type": "module",
+  "main": "acp-host.mjs",
+  "types": "acp-host.d.ts",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "files": ["acp-host.mjs", "acp-host.d.ts"]
+}
