@@ -358,6 +358,24 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                     .cloned()
                     .or_else(|| result.pointer("/agentCapabilities/auth/methods").cloned())
                     .unwrap_or(Value::Null);
+
+                // Cursor 这类 agent 要求 authenticate 必须发生在 session/new 之前，
+                // 否则后续 prompt 会以「WritableIterable is closed」收场
+                let auto = std::env::var("ACP_HOST_NO_AUTO_AUTH").is_err();
+                let method = session
+                    .auth_methods
+                    .as_array()
+                    .and_then(|list| list.first())
+                    .and_then(|m| m.get("id"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                if auto {
+                    if let Some(method) = method {
+                        session.send("authenticate", json!({"methodId": method}),
+                                     Pending::Authenticate);
+                        return;
+                    }
+                }
                 let cwd = session.cwd.clone();
                 session.send("session/new", json!({"cwd": cwd, "mcpServers": []}),
                              Pending::NewSession);
@@ -409,6 +427,12 @@ fn handle_agent_message(key: &str, value: Value, sessions: &mut HashMap<String, 
                     emit(json!({"event": "authFailed", "session": key, "error": error}));
                 } else {
                     emit(json!({"event": "authenticated", "session": key}));
+                }
+                // 自动登录这条路径：登录完接着开会话
+                if session.acp_session.is_none() {
+                    let cwd = session.cwd.clone();
+                    session.send("session/new", json!({"cwd": cwd, "mcpServers": []}),
+                                 Pending::NewSession);
                 }
             }
             Pending::SetModel { model, session_id } => {
@@ -506,7 +530,15 @@ fn handle_agent_request(key: &str, value: Value, session: &mut Session) {
                 session.reply_error(id, "acp-host 不提供文件/终端能力", -32601);
             }
         }
-        _ => {}
+        other => {
+            // 关键：带 id 的请求必须回一个响应，哪怕是我们不认识的方法。
+            // 沉默会让对方一直等，最后把整条流关掉（Cursor 报 WritableIterable is closed 就是这么来的）。
+            if let Some(id) = value.get("id").cloned() {
+                session.reply_error(id, &format!("acp-host 未实现: {other}"), -32601);
+            } else {
+                emit(json!({"event": "update", "session": key, "kind": other}));
+            }
+        }
     }
 }
 

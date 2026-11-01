@@ -28,19 +28,17 @@ while time.time() < deadline:
         state["models"] = [m.get("modelId") for m in models]
         print(f"[ready] models={len(state['models'])} current={(e.get('models') or {}).get('currentModelId')}")
         print(f"        authMethods={e.get('authMethods')}")
-        if e.get("authMethods"):
+        if e.get("authMethods") and not state.get("authed"):
             state["step"] = "auth"
             send({"id": "2", "method": "auth", "params": {"session": "s1"}})
-        else:
+        elif state.get("authed"):
             state["step"] = "prompt1"
             send({"id": "3", "method": "session.prompt",
                   "params": {"session": "s1", "text": "用一句话介绍你自己，不要用工具。"}})
 
     elif kind == "authenticated":
+        state["authed"] = True
         print("[auth] OK")
-        state["step"] = "prompt1"
-        send({"id": "3", "method": "session.prompt",
-              "params": {"session": "s1", "text": "用一句话介绍你自己，不要用工具。"}})
 
     elif kind == "text":
         state["text"] += e.get("text", "")
