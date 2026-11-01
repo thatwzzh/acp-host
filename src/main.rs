@@ -148,6 +148,14 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
         "agents.list" => {
             ok(id, json!({ "agents": registry() }));
         }
+        // 只返回本机真的装了的：宿主 app 可以直接拿它做「接入」列表
+        "agents.detect" => {
+            let installed: Vec<Value> = registry()
+                .into_iter()
+                .filter(|agent| command_installed(agent))
+                .collect();
+            ok(id, json!({ "agents": installed }));
+        }
         "session.start" => {
             let agent = params.get("agent").and_then(|v| v.as_str()).unwrap_or("");
             let cwd = params
@@ -711,6 +719,26 @@ fn fail(id: Value, message: &str) {
     emit(json!({"id": id, "ok": false, "error": message}));
 }
 
+/// 命令能不能在本机找到：绝对路径看文件，其它看 PATH 里有没有第一个词
+fn command_installed(agent: &Value) -> bool {
+    let Some(command) = agent.get("command").and_then(|v| v.as_str()) else { return false };
+    // workbuddy 那条是 env ... '绝对路径' ... 的形式，直接看引号里的可执行文件
+    if let Some(start) = command.find('\'') {
+        if let Some(end) = command[start + 1..].find('\'') {
+            let path = &command[start + 1..start + 1 + end];
+            return std::path::Path::new(path).exists();
+        }
+    }
+    let program = command.split_whitespace().next().unwrap_or("");
+    if program.starts_with('/') {
+        return std::path::Path::new(program).exists();
+    }
+    std::env::var("PATH")
+        .unwrap_or_default()
+        .split(':')
+        .any(|dir| std::path::Path::new(dir).join(program).exists())
+}
+
 fn registry() -> Vec<Value> {
     let mut agents = default_agents();
     if let Some(custom) = custom_agents() {
@@ -755,6 +783,12 @@ fn default_agents() -> Vec<Value> {
              HOME='{agent_home}' CODEBUDDY_FORCE_LITE_WB_BUNDLE=1 \
              '{cli}' --serve --port 0 --acp"
         );
+        // 免打扰：宿主设置了 ACP_HOST_SKIP_PERMISSIONS=1 就给 CLI 补这个开关
+        let command = if std::env::var("ACP_HOST_SKIP_PERMISSIONS").is_ok() {
+            format!("{command} --dangerously-skip-permissions")
+        } else {
+            command
+        };
         list.insert(0, json!({"id": "workbuddy", "name": "WorkBuddy", "command": command}));
     }
     list

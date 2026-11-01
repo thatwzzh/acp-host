@@ -20,7 +20,7 @@ while time.time() < deadline:
         if first is None:
             first = time.time()-t0; print(f"首字   {first:.2f}s")
     elif kind == "permission":
-        print("权限：", json.dumps(e.get("title"), ensure_ascii=False), str(e.get("options"))[:120])
+        print(f"权限   {time.time()-t0:.2f}s", json.dumps(e.get("title"), ensure_ascii=False))
         send({"id":"3","method":"permission","params":{"session":"s1","request":e["request"],"decision":"allow"}})
     elif kind == "done":
         print(f"完成   {time.time()-t0:.2f}s"); break
