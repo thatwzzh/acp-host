@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = process.env.ACP_HOST_VERSION || "0.1.1";
+const VERSION = process.env.ACP_HOST_VERSION || "0.1.2";
 const REPO = "thatwzzh/acp-host";
 const root = dirname(fileURLToPath(import.meta.url));
 const vendor = join(root, "vendor");

@@ -2,6 +2,11 @@
 
 把本机的 ACP agent 包成**一个单二进制守护进程**，任何语言接进来只需要：起进程、写一行 JSON、读一行 JSON。
 
+> **接入实例**：[Sprig（知枝）](https://github.com/thatwzzh/sprig) —— macOS 的划词问答面板。
+> 它把 acp-host 打进 `Sprig.app/Contents/Resources/`，面板只管渲染；登录、换模型、权限往返、
+> 各家 agent 的时序都在这个二进制里。想知道「真接进去长什么样」，看它就行。
+
+
 ```
 你的 app ──(stdin/stdout, 每行一个 JSON)── acp-host ──(ACP/JSON-RPC)── codebuddy / claude / codex
 ```
