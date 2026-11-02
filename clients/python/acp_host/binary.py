@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-VERSION = os.environ.get("ACP_HOST_VERSION", "0.1.2")
+VERSION = os.environ.get("ACP_HOST_VERSION", "0.1.3")
 REPO = "thatwzzh/acp-host"
 
 
@@ -59,10 +59,9 @@ def resolve() -> str:
     if configured:
         return configured
 
-    on_path = shutil.which("acp-host")
-    if on_path:
-        return on_path
-
+    # 先看自己下过的那份：它的版本和包是对齐的。
+    # 反过来先信 PATH，用户机器上躺着一个旧版就会静默用到旧版（曾经踩过：
+    # brew 里的 0.1.0 把 0.1.2 的包顶掉，连 version 命令都没有）。
     target = _target()
     if target:
         cached = os.path.join(_cache_dir(), "acp-host")
@@ -70,6 +69,10 @@ def resolve() -> str:
             return cached
         if _download(target, cached):
             return cached
+
+    on_path = shutil.which("acp-host")
+    if on_path:
+        return on_path
 
     raise FileNotFoundError(
         "找不到 acp-host。三种办法：装 Homebrew 包 `brew install thatwzzh/acp-host/acp-host`；"
