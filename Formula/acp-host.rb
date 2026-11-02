@@ -1,26 +1,26 @@
 class AcpHost < Formula
   desc "把本机 ACP agent 包成单二进制守护进程，任意语言按行 JSON 调用"
   homepage "https://github.com/thatwzzh/acp-host"
-  version "0.1.2"
+  version "0.1.3"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/thatwzzh/acp-host/releases/download/v#{version}/acp-host-aarch64-apple-darwin.tar.gz"
-      sha256 "1a7ba3550ddee260b4f8bd9dc6d368d6643f71c6ca28f0d2a693f1d67ed517bd"
+      sha256 "da4612bc910c83410501800e7194b8600b4e518a507865449ef4742a8e19a3eb"
     else
       url "https://github.com/thatwzzh/acp-host/releases/download/v#{version}/acp-host-x86_64-apple-darwin.tar.gz"
-      sha256 "6004df604e4ca50d3677b441410de581445960b647fa5c2f0e8796cc5b378840"
+      sha256 "2c77225d57b3b812b1462c72588c706b6ed30842d5ed3e74362198d45dd451ec"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/thatwzzh/acp-host/releases/download/v#{version}/acp-host-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "6ad6b9480cbe440f8fd8a0d203c4981518ca30d4cf08ee5f13c0e896d58434c4"
+      sha256 "5774561b93f0e682afc7fd31d6227009c1d22fa28095bdd5e5e8d3bf6192c212"
     else
       url "https://github.com/thatwzzh/acp-host/releases/download/v#{version}/acp-host-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "f6b168be6c0c07e44980b12367bac3a30aead5812299a35572e92653455fbfe9"
+      sha256 "e0ea62f31988779e45bce4bc4a2d6a9782f26c7ac38300a8294400937b686d4e"
     end
   end
 
