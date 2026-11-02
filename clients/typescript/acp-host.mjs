@@ -1,9 +1,18 @@
 // acp-host 薄客户端（无依赖，Node 18+）
 // 用法见 https://github.com/thatwzzh/acp-host
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** 优先用安装时下到 vendor/ 的二进制，其次交给 PATH */
+function defaultBinary() {
+  const bundled = join(dirname(fileURLToPath(import.meta.url)), "vendor", "acp-host");
+  return existsSync(bundled) ? bundled : "acp-host";
+}
 
 export class AcpHost {
-  constructor({ binary = process.env.ACP_HOST_BIN || "acp-host", cwd = process.cwd() } = {}) {
+  constructor({ binary = process.env.ACP_HOST_BIN || defaultBinary(), cwd = process.cwd() } = {}) {
     this.binary = binary;
     this.cwd = cwd;
     this.proc = null;

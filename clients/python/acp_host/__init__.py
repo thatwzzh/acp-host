@@ -11,7 +11,8 @@ from typing import Callable, Iterator
 
 class AcpHost:
     def __init__(self, binary: str | None = None, cwd: str | None = None):
-        self.binary = binary or os.environ.get("ACP_HOST_BIN", "acp-host")
+        from .binary import resolve
+        self.binary = binary or resolve()
         self.cwd = cwd or os.getcwd()
         self._proc: subprocess.Popen | None = None
         self._next = 0

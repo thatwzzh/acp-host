@@ -1,11 +1,32 @@
 {
   "name": "acp-host-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "acp-host 的薄客户端：起进程、按行 JSON 收事件",
   "type": "module",
   "main": "acp-host.mjs",
   "types": "acp-host.d.ts",
   "license": "MIT",
-  "engines": { "node": ">=18" },
-  "files": ["acp-host.mjs", "acp-host.d.ts"]
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "acp-host.mjs",
+    "acp-host.d.ts",
+    "install.js"
+  ],
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thatwzzh/acp-host.git"
+  },
+  "homepage": "https://github.com/thatwzzh/acp-host",
+  "keywords": [
+    "acp",
+    "agent",
+    "ai-agent",
+    "cli",
+    "json-rpc"
+  ]
 }
