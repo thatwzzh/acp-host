@@ -75,35 +75,33 @@ echo '{"id":"1","method":"agents.list"}' | ./acp-host
 
 内置了 `workbuddy`（自动探测 WorkBuddy.app 里的 CLI）、`codebuddy`、`claude`、`codex`。
 
-## 装到别的项目里
+## 安装
 
-三种用法，按「要不要装 Rust」排：
-
-**1. 直接用二进制**（推荐，不需要 Rust）
+三种方式，装完都能直接用（**不需要 Rust**）：
 
 ```bash
-# 从 Releases 下对应平台（macOS arm64/x86_64、Linux x86_64/arm64）
+# Homebrew（macOS / Linux）
+brew tap thatwzzh/acp-host && brew install acp-host
+
+# npm：自带客户端，安装时自动拉对应平台的二进制
+npm i -g acp-host-client
+
+# PyPI：同上，首次调用时下载到 ~/.cache/acp-host/
+pip install acp-host-client
+```
+
+不想装包管理器就直接下二进制：
+
+```bash
 curl -L https://github.com/thatwzzh/acp-host/releases/latest/download/acp-host-aarch64-apple-darwin.tar.gz \
   | tar xz -C /usr/local/bin
 ```
 
-发版只需要打个 tag，CI 会编四个平台并挂到 Releases：
-
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-**2. 用现成客户端**（省得自己拼行协议）
-
-```bash
-# Python
-pip install ./clients/python
-# TypeScript / Node
-npm i ./clients/typescript
-```
+## 在你项目里用
 
 ```python
 from acp_host import AcpHost
+
 host = AcpHost()
 for piece in host.ask("你好", agent="workbuddy"):
     print(piece, end="")
@@ -111,11 +109,15 @@ for piece in host.ask("你好", agent="workbuddy"):
 
 ```js
 import { AcpHost } from "acp-host-client";
+
 const host = new AcpHost();
 for await (const piece of host.ask("你好", { agent: "workbuddy" })) console.log(piece);
 ```
 
-**3. 自己包一层**：任何语言都是「起进程 → 写一行 JSON → 读一行 JSON」，
+客户端只做「起进程 + 按行收发 JSON」，查找二进制的顺序：
+`ACP_HOST_BIN` → PATH → npm 包内的 `vendor/` → `~/.cache/acp-host/`。
+
+**自己包一层也很简单**：任何语言都是「起进程 → 写一行 JSON → 读一行 JSON」，
 参考 `clients/` 里两个实现，各 80 行左右。
 
 ## 薄客户端
