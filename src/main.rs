@@ -145,6 +145,10 @@ fn handle_command(command: Value, sessions: &mut HashMap<String, Session>, next_
     let params = command.get("params").cloned().unwrap_or(json!({}));
 
     match method {
+        // 宿主用它确认装的版本对不对（brew 里躺旧版是最难查的一类问题）
+        "version" => {
+            ok(id, json!({ "version": env!("CARGO_PKG_VERSION") }));
+        }
         "agents.list" => {
             ok(id, json!({ "agents": registry() }));
         }
