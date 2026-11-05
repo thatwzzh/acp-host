@@ -1,5 +1,7 @@
 # acp-host
 
+[中文](README.md) · [English](README.en.md)
+
 **让你的程序能调用电脑里已经装好的 AI 编程助手。**
 
 WorkBuddy、Cursor、Claude、Codex 这些 CLI 都支持一种叫 ACP 的协议，但每接一种语言都要重学一遍：
