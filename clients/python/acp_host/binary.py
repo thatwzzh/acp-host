@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-VERSION = os.environ.get("ACP_HOST_VERSION", "0.1.5")
+VERSION = os.environ.get("ACP_HOST_VERSION", "0.1.6")
 REPO = "thatwzzh/acp-host"
 
 
