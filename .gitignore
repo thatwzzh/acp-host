@@ -1,1 +1,7 @@
 target/
+
+# Python 打包产物
+clients/python/dist/
+clients/python/build/
+clients/python/*.egg-info/
+__pycache__/

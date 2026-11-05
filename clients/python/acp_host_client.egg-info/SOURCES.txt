@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-acp_host/__init__.py
-acp_host/binary.py
-acp_host_client.egg-info/PKG-INFO
-acp_host_client.egg-info/SOURCES.txt
-acp_host_client.egg-info/dependency_links.txt
-acp_host_client.egg-info/top_level.txt
