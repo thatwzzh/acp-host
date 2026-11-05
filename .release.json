@@ -1,0 +1,27 @@
+{
+  "github": "thatwzzh/acp-host",
+  "tagPrefix": "v",
+  "binary": {
+    "assetPattern": "acp-host-{target}.tar.gz",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "versionFiles": ["Cargo.toml"]
+  },
+  "brew": {
+    "repoDir": "../homebrew-acp-host",
+    "formula": "Formula/acp-host.rb"
+  },
+  "npm": { "dir": "clients/typescript", "package": "acp-host-client" },
+  "pypi": { "dir": "clients/python", "package": "acp-host-client", "module": "acp_host" },
+  "versionFiles": [
+    "Cargo.toml",
+    "clients/typescript/package.json",
+    "clients/typescript/install.js",
+    "clients/python/pyproject.toml",
+    "clients/python/acp_host/binary.py"
+  ]
+}
