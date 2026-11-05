@@ -11,7 +11,7 @@
 //!   ← {"event":"done","session":"s1","stopReason":"end_turn"}
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
@@ -87,7 +87,38 @@ impl Session {
     }
 }
 
+const USAGE: &str = "\
+acp-host —— 把本机 ACP agent 包成单二进制守护进程
+
+  stdin/stdout 每行一个 JSON：
+
+    echo '{\"id\":\"1\",\"method\":\"version\"}' | acp-host
+    echo '{\"id\":\"1\",\"method\":\"agents.list\"}' | acp-host
+    echo '{\"id\":\"1\",\"method\":\"session.start\",\"params\":{\"agent\":\"workbuddy\",\"cwd\":\".\"}}' | acp-host
+
+  通常不由人直接运行，而是被 app 或客户端（npm / pip 上的 acp-host-client）起起来。
+  协议与 agent 配置：https://github.com/thatwzzh/acp-host
+";
+
+fn print_usage() {
+    print!("{USAGE}");
+    let _ = std::io::stdout().flush();
+}
+
 fn main() {
+    // 人手动跑的情况：直接给用法，别让它默默等 stdin 像个坏程序
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--version" || a == "-v") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h")
+        || (args.is_empty() && std::io::stdin().is_terminal())
+    {
+        print_usage();
+        return;
+    }
+
     let (tx, rx) = channel::<Incoming>();
     let _ = SENDER.set(tx.clone());
     spawn_stdin_reader(tx.clone());
