@@ -1,5 +1,10 @@
 # 发版清单
 
+> 一键版：`NPM_TOKEN=… PYPI_TOKEN=… ./scripts/publish.sh 0.1.6`
+> 预检不改任何东西：`./scripts/publish.sh --check 0.1.6`
+> 配置在 `.release.json`（渠道、产物命名、版本号散落在哪些文件）。手动步骤保留在下面做对照。
+
+
 版本号出现在四处，改的时候一起改：
 
 | 文件 | 字段 |
