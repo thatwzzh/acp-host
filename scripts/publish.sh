@@ -130,4 +130,4 @@ for i in $(seq 1 20); do
 done
 
 echo -e "\n发布完成：$TAG"
-echo "  建议再用真实安装验证一次：npm i -g $NPM_PKG / pip install $PYPI_PKG==$VERSION，跑 --version 比对"
+echo "  建议再用真实安装验证一次：npm i -g ${NPM_PKG} / pip install ${PYPI_PKG}==${VERSION}，跑 --version 比对"
